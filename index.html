@@ -23,10 +23,19 @@
         {
             "imports": {
               "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
-              "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+              "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/",
+              "Stats":"https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js"
             }
           }
     </script>
-    <script type="module" src="./main4.js"></script>
+    <script type="module" src="./main.js"></script>
+
+    <!-- <script type="module">
+        import {App} from './main2.js'
+        document.addEventListener("DOMContentLoaded", function(){
+			const app = new App();
+			window.app = app;
+		}); -->
+    </script>
 </body>
 </html>
