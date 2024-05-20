@@ -6,14 +6,14 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import Stats from "Stats";
 import { RGBELoader } from "https://unpkg.com/three@0.164.1/examples/jsm/loaders/RGBELoader.js";
 
-
-
+let controller1, controller2;
+let controllerGrip1, controllerGrip2;
 class App {
   constructor() {
     const container = document.createElement("div");
     document.body.appendChild(container);
 
-    this.camera = new THREE.PerspectiveCamera( 
+    this.camera = new THREE.PerspectiveCamera(
       60,
       window.innerWidth / window.innerHeight,
       0.01,
@@ -71,19 +71,24 @@ class App {
   async setEnvironment() {
     //lightning -> hdr file
     const loader = new RGBELoader();
-    const pmremGenerator = new THREE.PMREMGenerator( this.renderer );
+    const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
     pmremGenerator.compileEquirectangularShader();
 
     const self = this;
 
-    await loader.load( 'industrial_sunset_puresky_4k.HDR', ( texture ) => {
-      const envMap =  pmremGenerator.fromEquirectangular(texture).texture;
-      pmremGenerator.dispose();
-      thid.scene.environmentIntensity = 0.7;
-      self.scene.environment = envMap;
-    }, undefined, (err)=>{
-        console.error( 'An error occurred setting the environment',err);
-    } );
+    await loader.load(
+      "industrial_sunset_puresky_4k.HDR",
+      (texture) => {
+        const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+        pmremGenerator.dispose();
+        this.scene.environmentIntensity = 0.7;
+        self.scene.environment = envMap;
+      },
+      undefined,
+      (err) => {
+        console.error("An error occurred setting the environment", err);
+      }
+    );
   }
 
   resize() {
@@ -122,6 +127,7 @@ class App {
 
     function vrStatus(available) {
       if (available) {
+        console.log(available);
         function onSelectStart(event) {
           this.userData.selectPressed = true;
         }
@@ -132,10 +138,10 @@ class App {
 
         self.controllers = self.buildControllers(self.dolly);
 
-        self.controllers.forEach((controller) => {
-          controller.addEventListener("selectstart", onSelectStart);
-          controller.addEventListener("selectend", onSelectEnd);
-        });
+        // self.controllers.forEach((controller) => {
+        //   controller.addEventListener("selectstart", onSelectStart);
+        //   controller.addEventListener("selectend", onSelectEnd);
+        // });
       } else {
         self.joystick = new JoyStick({
           onMove: self.onMove.bind(self),
@@ -143,8 +149,10 @@ class App {
       }
     }
 
-    const btn = new VRButton(this.renderer, { vrStatus });
-    document.body.appendChild(VRButton.createButton(this.renderer));
+    const btn = VRButton.createButton(this.renderer);
+    document.body.appendChild(btn);
+    btn.addEventListener("click", vrStatus);
+    this.renderer.setAnimationLoop(this.render.bind(this));
 
     // const config = {
     //   panelSize: { height: 0.5 },
@@ -161,35 +169,64 @@ class App {
 
     // this.ui = new CanvasUI(content, config);
     // this.scene.add(this.ui.mesh);
-
-    this.renderer.setAnimationLoop(this.render.bind(this));
   }
 
+  //
   buildControllers(parent = this.scene) {
+    // const controllerModelFactory = new XRControllerModelFactory();
+
+    // const geometry = new THREE.BufferGeometry().setFromPoints([
+    //   new THREE.Vector3(0, 0, 0),
+    //   new THREE.Vector3(0, 0, -1),
+    // ]);
+
+    // const line = new THREE.Line(geometry);
+    // line.scale.z = 0;
+
+    // const controllers = [];
+
+    // for (let i = 0; i <= 1; i++) {
+    //   const controller = this.renderer.xr.getController(i);
+    //   controller.add(line.clone());
+    //   controller.userData.selectPressed = false;
+    //   parent.add(controller);
+    //   controllers.push(controller);
+
+    //   const grip = this.renderer.xr.getControllerGrip(i);
+    //   grip.add(controllerModelFactory.createControllerModel(grip));
+    //   parent.add(grip);
+    // }
+    // return controllers;
+
     const controllerModelFactory = new XRControllerModelFactory();
 
-    const geometry = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0, 0, -1),
-    ]);
+    function onController1Connected() {}
+    function onController2Connected() {}
+    // Controller 1
+    controller1 = this.renderer.xr.getController(0);
+    controller1.addEventListener("connected", onController1Connected);
 
-    const line = new THREE.Line(geometry);
-    line.scale.z = 0;
+    controllerGrip1 = this.renderer.xr.getControllerGrip(0);
+    controllerGrip1.add(
+      controllerModelFactory.createControllerModel(controllerGrip1)
+    );
+    parent.add(controllerGrip1);
+    this.scene.add(controllerGrip1);
+
+    // Controller 2
+    controller2 = this.renderer.xr.getController(1);
+    controller2.addEventListener("connected", onController2Connected);
+
+    controllerGrip2 = this.renderer.xr.getControllerGrip(1);
+    controllerGrip2.add(
+      controllerModelFactory.createControllerModel(controllerGrip2)
+    );
+    parent.add(controllerGrip2);
+    this.scene.add(controllerGrip2);
 
     const controllers = [];
-
-    for (let i = 0; i <= 1; i++) {
-      const controller = this.renderer.xr.getController(i);
-      controller.add(line.clone());
-      controller.userData.selectPressed = false;
-      parent.add(controller);
-      controllers.push(controller);
-
-      const grip = this.renderer.xr.getControllerGrip(i);
-      grip.add(controllerModelFactory.createControllerModel(grip));
-      parent.add(grip);
-    }
-
+    controllers.push(controller1);
+    controllers.push(controller2);
     return controllers;
   }
 
@@ -197,6 +234,8 @@ class App {
     this.stats.update();
     this.renderer.render(this.scene, this.camera);
   }
+
+  
 }
 
 export { App };

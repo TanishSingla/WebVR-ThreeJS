@@ -26,11 +26,19 @@ async function init() {
   const aspect = window.innerWidth / window.innerHeight;
   const near = 0.1;
   const far = 40;
-  camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
+  camera = new THREE.PerspectiveCamera(60,
+      window.innerWidth / window.innerHeight,
+      0.01,
+      500);
+  camera.position.set(0, 1.6, 3);
 
   // Set up the renderer
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
+
+  // renderer.shadowMap.enabled = true;
+  // renderer.shadowMap.type = THREE.PCFShadowMap;
+
   renderer.xr.enabled = true;
   document.body.appendChild(renderer.domElement);
   document.body.appendChild(VRButton.createButton(renderer));
@@ -40,7 +48,6 @@ async function init() {
   //orbit Controls
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.update();
-  camera.position.set(0, 1.6, 3);
 
   // Create a collision capsule for character
   const capsuleGeometry = new THREE.CapsuleGeometry(0, 0.01, 12);
@@ -53,31 +60,12 @@ async function init() {
   collisionCapsule.add(camera);
   collisionCapsule.position.set(0, 0, 0);
 
-  // if (renderer.xr.isPresenting) {
-  //   collisionCapsule.visible = true;
-  // } else {
-  //   collisionCapsule.visible = false;
-  // }
-
   // Controller logic
   setupControllers();
 
   // Add lighting
-  const light = new THREE.DirectionalLight(0xffffff, 1.5);
-  light.position.set(5, 10, 7);
-  light.castShadow = true;
-  // light.shadow.camera.top = 10;
-  // light.shadow.camera.bottom = -10;
-  // light.shadow.camera.left = -10;
-  // light.shadow.camera.right = 10;
-  // light.shadow.camera.near = 0.1;
-  // light.shadow.camera.far = 50;
-  // light.shadow.mapSize.width = 1024; 
-  // light.shadow.mapSize.height = 1024;
-  scene.add(light);
-
-  const ambientLight = new THREE.AmbientLight(0x404040); // Soft white light
-  scene.add(ambientLight);
+  // const ambientLight = new THREE.AmbientLight(0x404040); // Soft white light
+  // scene.add(ambientLight);
 
   // Load the 3D model
   await loadModel();
@@ -129,12 +117,26 @@ async function loadModel() {
   const loader = new GLTFLoader();
 
   try {
-    const gltf = await loader.loadAsync("Oxygenation.glb");
-    const model = gltf.scene;
-    model.scale.set(1, 1, 1);
-    model.position.set(0, 0, 0);
-    model.castShadow  = true;
-    scene.add(model);
+    const loader = new GLTFLoader();
+
+    loader.load(
+      "Oxygenation.glb",
+      (gltf) => {
+        const model = gltf.scene;
+        model.scale.set(1, 1, 1);
+        model.position.set(0, 0, 0);
+        scene.add(model);
+      },
+      // Progress callback
+      (xhr) => {
+        const percentLoaded = (xhr.loaded / xhr.total) * 100;
+        console.log(`Model loading: ${Math.round(percentLoaded)}%`);
+      },
+      // Error callback
+      (error) => {
+        console.error("An error occurred while loading the model:", error);
+      }
+    );
   } catch (error) {
     console.error("An error occurred while loading the model:", error);
   }
@@ -211,8 +213,6 @@ function handleControllerInputForRight(controller) {
 
 //event tick
 
-let lastFrameValue = 0;
-
 function render(time) {
   time *= 0.001;
 
@@ -232,12 +232,6 @@ function render(time) {
     }
     handleMovement();
 
-    // let temp = true;
-    // if(lastFrameValue <= 0.2 && lastFrameValue >= -1*(0.2)){
-    //   temp = true;
-    // }else{
-    //   temp = false;
-    // }
     handleTurn();
 
     let location = collisionCapsule.position.clone(); // Clone the position to avoid direct modification
@@ -248,7 +242,6 @@ function render(time) {
     const vrCamera = renderer.xr.getCamera(camera);
     const cameraWorldPosition = new THREE.Vector3();
     vrCamera.getWorldPosition(cameraWorldPosition);
-    lastFrameValue = RightController_inputX;
   }
   renderer.render(scene, camera);
 }
@@ -299,7 +292,6 @@ function handleMovement() {
   resultantVec.addVectors(forwardVec, rightVec); // This adds the vectors correctly in 3D space
   resultantVec.multiplyScalar(characterSpeed); // Apply movement speed scaling
 
-  // Check for NaN before updating the position to prevent errors
   if (
     !isNaN(resultantVec.x) &&
     !isNaN(resultantVec.y) &&
@@ -340,9 +332,6 @@ function handleTurn(check = true) {
     } else {
       rotationAmount = -45;
     }
-    // }else if(RightController_inputX < -1*(0.7) && check){
-    // rotationAmount = RightController_inputX * 45;
-    // }
 
     // Apply rotation to the collision capsule
     collisionCapsule.rotateY(rotationAmount);
@@ -357,7 +346,7 @@ async function setupLightning(renderer, scene) {
   const pmremGenerator = new THREE.PMREMGenerator(renderer);
 
   pmremGenerator.compileEquirectangularShader();
-  // console.log(pmremGenerator)
+
   await loader.load(
     "industrial_sunset_puresky_4k.HDR",
     (texture) => {
@@ -365,7 +354,7 @@ async function setupLightning(renderer, scene) {
       console.log(scene);
       pmremGenerator.dispose();
       scene.environment = envMap;
-      scene.environmentIntensity = 0.7;
+      scene.environmentIntensity = 0.8;
     },
     undefined,
     (err) => {
