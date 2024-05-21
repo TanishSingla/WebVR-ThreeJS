@@ -3,7 +3,6 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRButton } from "three/addons/webxr/VRButton.js";
 import { XRControllerModelFactory } from "three/addons/webxr/XRControllerModelFactory.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import * as Controller from "./controller.js";
 import { RGBELoader } from "https://unpkg.com/three@0.164.1/examples/jsm/loaders/RGBELoader.js";
 
 // Variables
@@ -17,36 +16,38 @@ let RightController_inputY, RightController_inputX;
 const characterSpeed = 0.05;
 const TurningSpeed = 0.01;
 let controls;
+let raycaster, intersectedObject, rayLine, listener;
+let isRaycasting = false;
+let audioLoader,sound;
+let grp;
+let rayLength = 5;
 
 async function init() {
   scene = new THREE.Scene();
+  raycaster = new THREE.Raycaster(
+    new THREE.Vector3(), 
+  new THREE.Vector3(0, 0, -1), 
+  0,rayLength);
+  listener = new THREE.AudioListener();
+  audioLoader = new THREE.AudioLoader();
+  sound = new THREE.Audio(listener);
+  grp = new THREE.Group();
 
   // Set up the camera
-  const fov = 75;
-  const aspect = window.innerWidth / window.innerHeight;
-  const near = 0.1;
-  const far = 40;
-  camera = new THREE.PerspectiveCamera(60,
-      window.innerWidth / window.innerHeight,
-      0.01,
-      500);
+  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 500);
   camera.position.set(0, 1.6, 3);
+  camera.add(listener);
 
   // Set up the renderer
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
-
-  // renderer.shadowMap.enabled = true;
-  // renderer.shadowMap.type = THREE.PCFShadowMap;
-
   renderer.xr.enabled = true;
   document.body.appendChild(renderer.domElement);
   document.body.appendChild(VRButton.createButton(renderer));
-
   setupLightning(renderer, scene);
 
-  //orbit Controls
-  const controls = new OrbitControls(camera, renderer.domElement);
+  // Orbit Controls
+  controls = new OrbitControls(camera, renderer.domElement);
   controls.update();
 
   // Create a collision capsule for character
@@ -60,72 +61,103 @@ async function init() {
   collisionCapsule.add(camera);
   collisionCapsule.position.set(0, 0, 0);
 
-  // Controller logic
+  // Create a line to represent the ray
+  const rayGeometry = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0, 0, -rayLength)
+  ]);
+
+  const rayMaterial = new THREE.LineBasicMaterial({
+    color: 0x00EAFF
+  });
+
   setupControllers();
-
-  // Add lighting
-  // const ambientLight = new THREE.AmbientLight(0x404040); // Soft white light
-  // scene.add(ambientLight);
-
+  
+  rayLine = new THREE.Line(rayGeometry, rayMaterial);
+  controller1.add(rayLine);
+  rayLine.visible = false;
+  
   // Load the 3D model
-  await loadModel();
+  await loadModel("Oxygenation.glb",false);
+  await loadModel("/assets/Oxygenation_Collidors.glb",true);
+
+  scene.add(grp);
 
   renderer.setAnimationLoop(render);
 }
 window.addEventListener("resize", resize.bind(this));
-
 function setupControllers() {
   const controllerModelFactory = new XRControllerModelFactory();
 
   // Controller 1
   controller1 = renderer.xr.getController(0);
   controller1.addEventListener("connected", onController1Connected);
+  controller1.addEventListener("selectstart", onSelectStartController1);
+  controller1.addEventListener("selectend", onSelectEndController1);
   collisionCapsule.add(controller1);
-  // scene.add(controller1);
 
   controllerGrip1 = renderer.xr.getControllerGrip(0);
-  controllerGrip1.add(
-    controllerModelFactory.createControllerModel(controllerGrip1)
-  );
+  controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
   collisionCapsule.add(controllerGrip1);
-  // scene.add(controllerGrip1);
 
   // Controller 2
   controller2 = renderer.xr.getController(1);
   controller2.addEventListener("connected", onController2Connected);
+  controller2.addEventListener("selectstart", onSelectStartController2);
+  controller2.addEventListener("selectend", onSelectEndController2);
   collisionCapsule.add(controller2);
-  // scene.add(controller2);
 
   controllerGrip2 = renderer.xr.getControllerGrip(1);
-  controllerGrip2.add(
-    controllerModelFactory.createControllerModel(controllerGrip2)
-  );
+  controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
   collisionCapsule.add(controllerGrip2);
-  // scene.add(controllerGrip2);
 }
 
+// Function for handling inputs...
 function onController2Connected(event) {
-  console.log("askjdnasjkbd", controller2);
   controller2.userData = event.data;
 }
 function onController1Connected(event) {
-  console.log("askjdnasjkbd2", controller1);
   controller1.userData = event.data;
 }
 
-async function loadModel() {
+function onSelectStartController1(event) {
+  if (!isRaycasting) {
+    rayLine.visible = true;
+    isRaycasting = true; // Enable raycasting
+  } else {
+    rayLine.visible = false;
+    isRaycasting = false;
+  }
+}
+
+function onSelectEndController1() {}
+
+function onSelectStartController2() {
+  console.log("Input Triggered");
+}
+
+function onSelectEndController2() {
+  console.log("Input Ended");
+}
+
+async function loadModel(path,hide) {
   const loader = new GLTFLoader();
 
   try {
     const loader = new GLTFLoader();
-
     loader.load(
-      "Oxygenation.glb",
+      path,
       (gltf) => {
         const model = gltf.scene;
         model.scale.set(1, 1, 1);
         model.position.set(0, 0, 0);
-        scene.add(model);
+        // scene.add(model);
+        if(hide){
+          grp.add(model);
+          model.visible = false;
+        }else{
+          scene.add(model);
+        }
       },
       // Progress callback
       (xhr) => {
@@ -140,6 +172,7 @@ async function loadModel() {
   } catch (error) {
     console.error("An error occurred while loading the model:", error);
   }
+
 }
 
 function resizeRendererToDisplaySize(renderer) {
@@ -160,7 +193,7 @@ function handleControllerInputForLeft(controller) {
       controller.userData.gamepad.axes &&
       controller.userData.gamepad.axes
     ) {
-      //for deadzone...
+      // For deadzone...
       if (
         controller.userData.gamepad.axes[2] <= 0.1 &&
         controller.userData.gamepad.axes[2] >= -0.1
@@ -189,7 +222,7 @@ function handleControllerInputForRight(controller) {
       controller.userData.gamepad.axes &&
       controller.userData.gamepad.axes
     ) {
-      //for deadzone...
+      // For deadzone...
       if (
         controller.userData.gamepad.axes[2] <= 0.1 &&
         controller.userData.gamepad.axes[2] >= -0.1
@@ -211,8 +244,7 @@ function handleControllerInputForRight(controller) {
   }
 }
 
-//event tick
-
+// Event tick
 function render(time) {
   time *= 0.001;
 
@@ -226,24 +258,93 @@ function render(time) {
   handleControllerInputForRight(controller2);
 
   if (renderer.xr.isPresenting) {
-    console.clear();
-    if (controller1.userData.gamepad?.buttons) {
-      console.log(controller1.userData.gamepad?.buttons[3]);
-    }
+    // Orientation
     handleMovement();
-
     handleTurn();
 
     let location = collisionCapsule.position.clone(); // Clone the position to avoid direct modification
-    camera.position
-      .copy(location)
-      .add(new THREE.Vector3(0, capsuleHeight / 2, 0));
+    camera.position.copy(location).add(new THREE.Vector3(0, capsuleHeight / 2, 0));
 
-    const vrCamera = renderer.xr.getCamera(camera);
-    const cameraWorldPosition = new THREE.Vector3();
-    vrCamera.getWorldPosition(cameraWorldPosition);
+    // Update the ray's position and direction if raycasting is enabled
+    if (isRaycasting) {
+      updateRay(controller1);
+    }
   }
   renderer.render(scene, camera);
+}
+
+
+function playAudio(obj){
+ 
+  let path = "";
+  if(obj.name=="Oil_Absorber" ){
+    path = '/assets/Audio/Oil_Absorber.wav';
+  }
+  else if(obj.name=="Moisture_Absorber"){
+    path = '/assets/Audio/Moisture_Absorber.wav';
+  }else if(obj.name=="Purger"){
+    path = '/assets/Audio/Purger.wav';
+  }else if(obj.name=="Carbon_Dioxide_Drying_Unit"){
+    path = '/assets/Audio/Carbon_Dioxide_Drying_Unit.wav';
+  }else if(obj.name=="After_Cooler"){
+    path = '/assets/Audio/After_Cooler.wav';
+  }else if(obj.name=="Nitrogen_Cooler"){
+    path = '/assets/Audio/Nitrogen_Cooler.wav';
+  }else if(obj.name=="Freon_Cooler"){
+    path = '/assets/Audio/Freon_Cooler.wav';
+  }else if(obj.name=="Cold_Box"){
+    path = '/assets/Audio/Cold_Box.wav';
+  }else if(obj.name=="Air_Expander"){
+    path = '/assets/Audio/Air_Expander.wav';
+  }else if(obj.name=="Air_Filter"){
+    path = '/assets/Audio/Air_Filter.wav';
+  }else if(obj.name == "Air_Compressor"){
+    path = '/assets/Audio/Air_Compressor.wav';
+  }else if(obj.name == "Cylinder_Filling_Ramp"){
+    path = '/assets/Audio/Cylinder_Filling_Ramp.wav';
+  }else if(obj.name == "Liquid_Oxygen_Pump"){
+    path = '/assets/Audio/Liquid_Oxygen_Pump.wav';
+  }else if(obj.name == "Regeneration_Heater"){
+    path = '/assets/Audio/Regeneration_Heater.wav';
+  }
+
+  if(path!=""){
+    if(sound.isPlaying){
+      sound.stop();
+    }
+      audioLoader.load(path,function(buffer){
+      sound.setBuffer(buffer);
+      sound.setLoop(false);
+      sound.setVolume(0.6);
+      sound.play();
+    });
+    sound.onEnded = ()=>{
+
+    }
+  }
+}
+
+let prevIntersectObject = null;
+function updateRay(controller) {
+
+  raycaster.setFromXRController( controller1);
+  
+  const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(controller.matrixWorld).sub(raycaster.ray.origin).normalize();
+  raycaster.ray.direction.copy(direction);
+
+  const intersects = raycaster.intersectObjects(grp.children, true);
+  if (intersects.length > 0) {
+    intersectedObject = intersects[0].object;
+    console.log(intersectedObject.name)
+    if((prevIntersectObject==null) || (prevIntersectObject.name!=intersectedObject.name)){
+      playAudio(intersectedObject);
+    }
+    prevIntersectObject = intersectedObject;
+    
+  } else {
+    intersectedObject = null;
+    prevIntersectObject  = null;
+  }
 }
 
 init();
@@ -265,18 +366,13 @@ function getRightVector(object) {
   right.normalize();
   return right;
 }
+
 function handleMovement() {
   if (
     isNaN(LeftController_inputX) ||
     isNaN(LeftController_inputY) ||
     isNaN(characterSpeed)
   ) {
-    console.error(
-      "Invalid input:",
-      LeftController_inputX,
-      LeftController_inputY,
-      characterSpeed
-    );
     return;
   }
 
@@ -291,54 +387,34 @@ function handleMovement() {
   let resultantVec = new THREE.Vector3();
   resultantVec.addVectors(forwardVec, rightVec); // This adds the vectors correctly in 3D space
   resultantVec.multiplyScalar(characterSpeed); // Apply movement speed scaling
-
-  if (
-    !isNaN(resultantVec.x) &&
-    !isNaN(resultantVec.y) &&
-    !isNaN(resultantVec.z)
-  ) {
+  resultantVec.y = 0;
+  if (!isNaN(resultantVec.x) && !isNaN(resultantVec.y) && !isNaN(resultantVec.z)) {
     collisionCapsule.position.add(resultantVec);
   } else {
     console.error("NaN detected in resultant vector:", resultantVec);
   }
 }
+
 let isStarted = false;
-let prevValue = 0;
 function handleTurn(check = true) {
-  if (
-    !isStarted &&
-    (RightController_inputX > 0 || RightController_inputX < 0)
-  ) {
+  if (!isStarted && (RightController_inputX > 0 || RightController_inputX < 0)) {
     isStarted = true;
-    if (
-      isNaN(RightController_inputX) ||
-      isNaN(RightController_inputY) ||
-      isNaN(TurningSpeed)
-    ) {
-      console.error(
-        "Invalid input:",
-        RightController_inputX,
-        RightController_inputY,
-        TurningSpeed
-      );
+    if (isNaN(RightController_inputX) || isNaN(RightController_inputY) || isNaN(TurningSpeed)) {
+      console.error("Invalid input:", RightController_inputX, RightController_inputY, TurningSpeed);
       return;
     }
-    // console.log(RightController_inputX)
     let rotationAmount = 0;
 
-    // if(RightController_inputX > 0.7 && check){
     if (RightController_inputX < 0) {
       rotationAmount = 45;
     } else {
       rotationAmount = -45;
     }
-
     // Apply rotation to the collision capsule
     collisionCapsule.rotateY(rotationAmount);
   } else if (RightController_inputX >= -0.1 && RightController_inputX <= 0.1) {
     isStarted = false;
   }
-  prevValue = RightController_inputX;
 }
 
 async function setupLightning(renderer, scene) {
@@ -351,7 +427,6 @@ async function setupLightning(renderer, scene) {
     "industrial_sunset_puresky_4k.HDR",
     (texture) => {
       const envMap = pmremGenerator.fromEquirectangular(texture).texture;
-      console.log(scene);
       pmremGenerator.dispose();
       scene.environment = envMap;
       scene.environmentIntensity = 0.8;
