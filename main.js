@@ -78,7 +78,7 @@ async function init() {
   rayLine.visible = false;
   
   // Load the 3D model
-  await loadModel("Oxygenation.glb",false);
+  await loadModel("/assets/Oxygenation.glb",false);
   await loadModel("/assets/Oxygenation_Collidors.glb",true);
 
   scene.add(grp);
@@ -424,7 +424,7 @@ async function setupLightning(renderer, scene) {
   pmremGenerator.compileEquirectangularShader();
 
   await loader.load(
-    "industrial_sunset_puresky_4k.HDR",
+    "/assets/industrial_sunset_puresky_4k.HDR",
     (texture) => {
       const envMap = pmremGenerator.fromEquirectangular(texture).texture;
       pmremGenerator.dispose();
