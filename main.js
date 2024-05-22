@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { VRButton } from "three/addons/webxr/VRButton.js";
 import { XRControllerModelFactory } from "three/addons/webxr/XRControllerModelFactory.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -18,23 +19,30 @@ const TurningSpeed = 0.01;
 let controls;
 let raycaster, intersectedObject, rayLine, listener;
 let isRaycasting = false;
-let audioLoader,sound;
+let audioLoader, sound;
 let grp;
 let rayLength = 5;
 
 async function init() {
   scene = new THREE.Scene();
   raycaster = new THREE.Raycaster(
-    new THREE.Vector3(), 
-  new THREE.Vector3(0, 0, -1), 
-  0,rayLength);
+    new THREE.Vector3(),
+    new THREE.Vector3(0, 0, -1),
+    0,
+    rayLength
+  );
   listener = new THREE.AudioListener();
   audioLoader = new THREE.AudioLoader();
   sound = new THREE.Audio(listener);
   grp = new THREE.Group();
 
   // Set up the camera
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 500);
+  camera = new THREE.PerspectiveCamera(
+    60,
+    window.innerWidth / window.innerHeight,
+    0.01,
+    500
+  );
   camera.position.set(0, 1.6, 3);
   camera.add(listener);
 
@@ -64,26 +72,32 @@ async function init() {
   // Create a line to represent the ray
   const rayGeometry = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(0, 0, 0),
-    new THREE.Vector3(0, 0, -rayLength)
+    new THREE.Vector3(0, 0, -rayLength),
   ]);
 
   const rayMaterial = new THREE.LineBasicMaterial({
-    color: 0x00EAFF
+    color: 0x00eaff,
   });
 
   setupControllers();
-  
+
   rayLine = new THREE.Line(rayGeometry, rayMaterial);
   controller1.add(rayLine);
   rayLine.visible = false;
-  
+
   // Load the 3D model
-  await loadModel("/assets/Oxygenation.glb",false);
-  await loadModel("/assets/Oxygenation_Collidors.glb",true);
+  await loadModel("/assets/Oxygenation.glb", false);
+  await loadModel("/assets/Oxygenation_Collidors.glb", true);
 
   scene.add(grp);
+  renderer.xr.addEventListener("sessionstart", onSessionStart);
   renderer.setAnimationLoop(render);
 }
+
+function onSessionStart(xrFrame) {
+  console.log(xrFrame);
+}
+
 window.addEventListener("resize", resize.bind(this));
 function setupControllers() {
   const controllerModelFactory = new XRControllerModelFactory();
@@ -96,7 +110,9 @@ function setupControllers() {
   collisionCapsule.add(controller1);
 
   controllerGrip1 = renderer.xr.getControllerGrip(0);
-  controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+  controllerGrip1.add(
+    controllerModelFactory.createControllerModel(controllerGrip1)
+  );
   collisionCapsule.add(controllerGrip1);
 
   // Controller 2
@@ -107,7 +123,9 @@ function setupControllers() {
   collisionCapsule.add(controller2);
 
   controllerGrip2 = renderer.xr.getControllerGrip(1);
-  controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
+  controllerGrip2.add(
+    controllerModelFactory.createControllerModel(controllerGrip2)
+  );
   collisionCapsule.add(controllerGrip2);
 }
 
@@ -139,11 +157,14 @@ function onSelectEndController2() {
   console.log("Input Ended");
 }
 
-async function loadModel(path,hide) {
+async function loadModel(path, hide) {
+  const draco = new DRACOLoader();
+  draco.setDecoderConfig({ type: 'js' });
+  draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
   const loader = new GLTFLoader();
+  loader.setDRACOLoader(draco);
 
   try {
-    const loader = new GLTFLoader();
     loader.load(
       path,
       (gltf) => {
@@ -151,10 +172,10 @@ async function loadModel(path,hide) {
         model.scale.set(1, 1, 1);
         model.position.set(0, 0, 0);
         // scene.add(model);
-        if(hide){
+        if (hide) {
           grp.add(model);
           model.visible = false;
-        }else{
+        } else {
           scene.add(model);
         }
       },
@@ -171,7 +192,6 @@ async function loadModel(path,hide) {
   } catch (error) {
     console.error("An error occurred while loading the model:", error);
   }
-
 }
 
 function resizeRendererToDisplaySize(renderer) {
@@ -244,8 +264,25 @@ function handleControllerInputForRight(controller) {
 }
 
 // Event tick
-function render(time) {
+let cnt = 0;
+function render(time, xrFrame) {
   time *= 0.001;
+
+  // if (xrFrame && cnt == 0) {
+  //   const referenceSpace = renderer.xr.getReferenceSpace();
+  //   const session = renderer.xr.getSession();
+  //   const viewerPose = xrFrame.getViewerPose(referenceSpace);
+  //   if (viewerPose) {
+  //     const orientation = viewerPose.transform.orientation;
+  //     collisionCapsule.quaternion.set(
+  //       0,
+  //       orientation.y,
+  //       0,
+  //       0,
+  //     );
+  //   }
+  //   cnt++;
+  // }
 
   if (resizeRendererToDisplaySize(renderer)) {
     const canvas = renderer.domElement;
@@ -260,8 +297,10 @@ function render(time) {
     // Orientation
     handleMovement();
     handleTurn();
-    let location = collisionCapsule.position.clone(); // Clone the position to avoid direct modification
-    camera.position.copy(location).add(new THREE.Vector3(0, capsuleHeight / 2, 0));
+
+    // let location = collisionCapsule.position.clone();
+    // camera.position.add(new THREE.Vector3(0, capsuleHeight / 2, 0));
+
     // Update the ray's position and direction if raycasting is enabled
     if (isRaycasting) {
       updateRay(controller1);
@@ -270,75 +309,76 @@ function render(time) {
   renderer.render(scene, camera);
 }
 
-
-function playAudio(obj){
- 
+function playAudio(obj) {
   let path = "";
-  if(obj.name=="Oil_Absorber" ){
-    path = '/assets/Audio/Oil_Absorber.wav';
-  }else if(obj.name=="Moisture_Absorber"){
-    path = '/assets/Audio/Moisture_Absorber.wav';
-  }else if(obj.name=="Purger"){
-    path = '/assets/Audio/Purger.wav';
-  }else if(obj.name=="Carbon_Dioxide_Drying_Unit"){
-    path = '/assets/Audio/Carbon_Dioxide_Drying_Unit.wav';
-  }else if(obj.name=="After_Cooler"){
-    path = '/assets/Audio/After_Cooler.wav';
-  }else if(obj.name=="Nitrogen_Cooler"){
-    path = '/assets/Audio/Nitrogen_Cooler.wav';
-  }else if(obj.name=="Freon_Cooler"){
-    path = '/assets/Audio/Freon_Cooler.wav';
-  }else if(obj.name=="Cold_Box"){
-    path = '/assets/Audio/Cold_Box.wav';
-  }else if(obj.name=="Air_Expander"){
-    path = '/assets/Audio/Air_Expander.wav';
-  }else if(obj.name=="Air_Filter"){
-    path = '/assets/Audio/Air_Filter.wav';
-  }else if(obj.name == "Air_Compressor"){
-    path = '/assets/Audio/Air_Compressor.wav';
-  }else if(obj.name == "Cylinder_Filling_Ramp"){
-    path = '/assets/Audio/Cylinder_Filling_Ramp.wav';
-  }else if(obj.name == "Liquid_Oxygen_Pump"){
-    path = '/assets/Audio/Liquid_Oxygen_Pump.wav';
-  }else if(obj.name == "Regeneration_Heater"){
-    path = '/assets/Audio/Regeneration_Heater.wav';
+  if (obj.name == "Oil_Absorber") {
+    path = "/assets/Audio/Oil_Absorber.mp3";
+  } else if (obj.name == "Moisture_Absorber") {
+    path = "/assets/Audio/Moisture_Absorber.mp3";
+  } else if (obj.name == "Purger") {
+    path = "/assets/Audio/Purger.mp3";
+  } else if (obj.name == "Carbon_Dioxide_Drying_Unit") {
+    path = "/assets/Audio/Carbon_Dioxide_Drying_Unit.mp3";
+  } else if (obj.name == "After_Cooler") {
+    path = "/assets/Audio/After_Cooler.mp3";
+  } else if (obj.name == "Nitrogen_Cooler") {
+    path = "/assets/Audio/Nitrogen_Cooler.mp3";
+  } else if (obj.name == "Freon_Cooler") {
+    path = "/assets/Audio/Freon_Cooler.mp3";
+  } else if (obj.name == "Cold_Box") {
+    path = "/assets/Audio/Cold_Box.mp3";
+  } else if (obj.name == "Air_Expander") {
+    path = "/assets/Audio/Air_Expander.mp3";
+  } else if (obj.name == "Air_Filter") {
+    path = "/assets/Audio/Air_Filter.mp3";
+  } else if (obj.name == "Air_Compressor") {
+    path = "/assets/Audio/Air_Compressor.mp3";
+  } else if (obj.name == "Cylinder_Filling_Ramp") {
+    path = "/assets/Audio/Cylinder_Filling_Ramp.mp3";
+  } else if (obj.name == "Liquid_Oxygen_Pump") {
+    path = "/assets/Audio/Liquid_Oxygen_Pump.mp3";
+  } else if (obj.name == "Regeneration_Heater") {
+    path = "/assets/Audio/Regeneration_Heater.mp3";
   }
 
-  if(path!=""){
-    if(sound.isPlaying){
+  if (path != "") {
+    if (sound.isPlaying) {
       sound.stop();
     }
-      audioLoader.load(path,function(buffer){
+    audioLoader.load(path, function (buffer) {
       sound.setBuffer(buffer);
       sound.setLoop(false);
       sound.setVolume(0.6);
       sound.play();
     });
-    sound.onEnded = ()=>{
-    }
+    sound.onEnded = () => {};
   }
 }
 
 let prevIntersectObject = null;
 function updateRay(controller) {
+  raycaster.setFromXRController(controller1);
 
-  raycaster.setFromXRController( controller1);
-  
-  const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(controller.matrixWorld).sub(raycaster.ray.origin).normalize();
+  const direction = new THREE.Vector3(0, 0, -1)
+    .applyMatrix4(controller.matrixWorld)
+    .sub(raycaster.ray.origin)
+    .normalize();
   raycaster.ray.direction.copy(direction);
 
   const intersects = raycaster.intersectObjects(grp.children, true);
   if (intersects.length > 0) {
     intersectedObject = intersects[0].object;
-    console.log(intersectedObject.name)
-    if((prevIntersectObject==null) || (prevIntersectObject.name!=intersectedObject.name)){
+    console.log(intersectedObject.name);
+    if (
+      prevIntersectObject == null ||
+      prevIntersectObject.name != intersectedObject.name
+    ) {
       playAudio(intersectedObject);
     }
     prevIntersectObject = intersectedObject;
-    
   } else {
     intersectedObject = null;
-    prevIntersectObject  = null;
+    prevIntersectObject = null;
   }
 }
 
@@ -371,19 +411,26 @@ function handleMovement() {
     return;
   }
 
+  const vrCamera = renderer.xr.getCamera(camera);
   const forwardVec = getForwardVector(collisionCapsule);
   const rightVec = getRightVector(collisionCapsule);
-
-  // Scale the vectors by the controller inputs
+  // vrCamera.rotation.x=0;
+  // vrCamera.rotation.z = 0;
+  
   forwardVec.multiplyScalar(LeftController_inputY);
   rightVec.multiplyScalar(LeftController_inputX);
 
-  // Combine the scaled vectors to get the resultant movement vector
   let resultantVec = new THREE.Vector3();
-  resultantVec.addVectors(forwardVec, rightVec); // This adds the vectors correctly in 3D space
-  resultantVec.multiplyScalar(characterSpeed); // Apply movement speed scaling
+  resultantVec.addVectors(forwardVec, rightVec);
+  resultantVec.applyEuler(vrCamera.rotation);
+  resultantVec.multiplyScalar(characterSpeed);
   resultantVec.y = 0;
-  if (!isNaN(resultantVec.x) && !isNaN(resultantVec.y) && !isNaN(resultantVec.z)) {
+  // resultantVec.z = 0;
+  if (
+    !isNaN(resultantVec.x) &&
+    !isNaN(resultantVec.y) &&
+    !isNaN(resultantVec.z)
+  ) {
     collisionCapsule.position.add(resultantVec);
   } else {
     console.error("NaN detected in resultant vector:", resultantVec);
@@ -392,10 +439,22 @@ function handleMovement() {
 
 let isStarted = false;
 function handleTurn(check = true) {
-  if (!isStarted && (RightController_inputX > 0 || RightController_inputX < 0)) {
+  if (
+    !isStarted &&
+    (RightController_inputX > 0 || RightController_inputX < 0)
+  ) {
     isStarted = true;
-    if (isNaN(RightController_inputX) || isNaN(RightController_inputY) || isNaN(TurningSpeed)) {
-      console.error("Invalid input:", RightController_inputX, RightController_inputY, TurningSpeed);
+    if (
+      isNaN(RightController_inputX) ||
+      isNaN(RightController_inputY) ||
+      isNaN(TurningSpeed)
+    ) {
+      console.error(
+        "Invalid input:",
+        RightController_inputX,
+        RightController_inputY,
+        TurningSpeed
+      );
       return;
     }
     let rotationAmount = 0;
