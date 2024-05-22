@@ -82,7 +82,6 @@ async function init() {
   await loadModel("/assets/Oxygenation_Collidors.glb",true);
 
   scene.add(grp);
-
   renderer.setAnimationLoop(render);
 }
 window.addEventListener("resize", resize.bind(this));
@@ -261,10 +260,8 @@ function render(time) {
     // Orientation
     handleMovement();
     handleTurn();
-
     let location = collisionCapsule.position.clone(); // Clone the position to avoid direct modification
     camera.position.copy(location).add(new THREE.Vector3(0, capsuleHeight / 2, 0));
-
     // Update the ray's position and direction if raycasting is enabled
     if (isRaycasting) {
       updateRay(controller1);
@@ -279,8 +276,7 @@ function playAudio(obj){
   let path = "";
   if(obj.name=="Oil_Absorber" ){
     path = '/assets/Audio/Oil_Absorber.wav';
-  }
-  else if(obj.name=="Moisture_Absorber"){
+  }else if(obj.name=="Moisture_Absorber"){
     path = '/assets/Audio/Moisture_Absorber.wav';
   }else if(obj.name=="Purger"){
     path = '/assets/Audio/Purger.wav';
@@ -319,7 +315,6 @@ function playAudio(obj){
       sound.play();
     });
     sound.onEnded = ()=>{
-
     }
   }
 }
