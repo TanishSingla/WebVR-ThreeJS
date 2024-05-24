@@ -5,6 +5,8 @@ import { VRButton } from "three/addons/webxr/VRButton.js";
 import { XRControllerModelFactory } from "three/addons/webxr/XRControllerModelFactory.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RGBELoader } from "https://unpkg.com/three@0.164.1/examples/jsm/loaders/RGBELoader.js";
+import CannonDebugger from "https://cdn.jsdelivr.net/npm/cannon-es-debugger@1.0.0/+esm";
+import * as CANNON from "cannon";
 
 // Variables
 let scene, camera, renderer;
@@ -22,6 +24,10 @@ let isRaycasting = false;
 let audioLoader, sound;
 let grp;
 let rayLength = 5;
+let world;
+let collisionCapsuleBody;
+let cannonDebugger;
+let debug = false;
 
 async function init() {
   scene = new THREE.Scene();
@@ -35,6 +41,37 @@ async function init() {
   audioLoader = new THREE.AudioLoader();
   sound = new THREE.Audio(listener);
   grp = new THREE.Group();
+
+  //Cannonjs impl
+  world = new CANNON.World();
+  world.gravity.set(0, -9.81, 0);
+  cannonDebugger = new CannonDebugger(scene, world);
+
+  const noBounceMaterial = new CANNON.Material("noBounce");
+  console.log(noBounceMaterial);
+  const plasticContactConcreteMaterial = new CANNON.Material("plastic");
+  const noBounceContactMaterial = new CANNON.ContactMaterial(
+    noBounceMaterial,
+    plasticContactConcreteMaterial,
+    {
+      friction: 0.1,
+      restitution: 0,
+    }
+  );
+  world.addContactMaterial(noBounceContactMaterial);
+
+  //ground
+  const planeShape = new CANNON.Plane();
+  const planeBody = new CANNON.Body({
+    mass: 0,
+    position: new CANNON.Vec3(0, 0, 0),
+    shape: planeShape,
+  });
+  planeBody.quaternion.setFromAxisAngle(
+    new CANNON.Vec3(1, 0, 0),
+    -Math.PI * 0.5
+  );
+  world.addBody(planeBody);
 
   // Set up the camera
   camera = new THREE.PerspectiveCamera(
@@ -59,15 +96,26 @@ async function init() {
   controls.update();
 
   // Create a collision capsule for character
-  const capsuleGeometry = new THREE.CapsuleGeometry(0, 0.01, 12);
+  const capsuleGeometry = new THREE.CapsuleGeometry(0.1, capsuleHeight / 2, 1);
   const capsuleMaterial = new THREE.MeshBasicMaterial({
     color: 0xff0000,
-    wireframe: true,
+    opacity: 0,
+    transparent: true,
   });
   collisionCapsule = new THREE.Mesh(capsuleGeometry, capsuleMaterial);
   scene.add(collisionCapsule);
   collisionCapsule.add(camera);
   collisionCapsule.position.set(0, 0, 0);
+
+  //physics body for capsule
+  collisionCapsuleBody = new CANNON.Body({
+    mass: 100000,
+    shape: new CANNON.Box(new CANNON.Vec3(0.1, capsuleHeight / 3, 0.1)),
+    position: new CANNON.Vec3(0, 1, 0),
+    material: noBounceMaterial,
+  });
+  collisionCapsuleBody.angularFactor.set(0, 1, 0);
+  world.addBody(collisionCapsuleBody);
 
   // Create a line to represent the ray
   const rayGeometry = new THREE.BufferGeometry().setFromPoints([
@@ -82,7 +130,7 @@ async function init() {
   setupControllers();
 
   rayLine = new THREE.Line(rayGeometry, rayMaterial);
-  controller1.add(rayLine);
+  controller2.add(rayLine);
   rayLine.visible = false;
 
   // Load the 3D model
@@ -90,12 +138,18 @@ async function init() {
   await loadModel("/assets/Oxygenation_Collidors.glb", true);
 
   scene.add(grp);
-  renderer.xr.addEventListener("sessionstart", onSessionStart);
+  renderer.xr.addEventListener("sessionend", onSessionEnd);
   renderer.setAnimationLoop(render);
 }
 
-function onSessionStart(xrFrame) {
-  console.log(xrFrame);
+function onSessionEnd() {
+  console.log("session end");
+  collisionCapsule.position.set(0, 0, 0);
+  camera.position.set(0, 1.6, 3);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.near = 0.01;
+  camera.far = 500;
+  camera.updateProjectionMatrix();
 }
 
 window.addEventListener("resize", resize.bind(this));
@@ -137,20 +191,18 @@ function onController1Connected(event) {
   controller1.userData = event.data;
 }
 
-function onSelectStartController1(event) {
-  if (!isRaycasting) {
-    rayLine.visible = true;
-    isRaycasting = true; // Enable raycasting
-  } else {
-    rayLine.visible = false;
-    isRaycasting = false;
-  }
-}
+function onSelectStartController1(event) {}
 
 function onSelectEndController1() {}
 
 function onSelectStartController2() {
-  console.log("Input Triggered");
+  if (!isRaycasting) {
+    rayLine.visible = true;
+    isRaycasting = true;
+  } else {
+    rayLine.visible = false;
+    isRaycasting = false;
+  }
 }
 
 function onSelectEndController2() {
@@ -159,8 +211,8 @@ function onSelectEndController2() {
 
 async function loadModel(path, hide) {
   const draco = new DRACOLoader();
-  draco.setDecoderConfig({ type: 'js' });
-  draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
+  draco.setDecoderConfig({ type: "js" });
+  draco.setDecoderPath("https://www.gstatic.com/draco/v1/decoders/");
   const loader = new GLTFLoader();
   loader.setDRACOLoader(draco);
 
@@ -178,13 +230,40 @@ async function loadModel(path, hide) {
         } else {
           scene.add(model);
         }
+
+        if (hide) {
+          model.traverse((child) => {
+            if (child.isMesh) {
+              const geometry = child.geometry;
+              let shape;
+              const box = new THREE.Box3().setFromObject(child);
+              const size = new THREE.Vector3();
+              box.getSize(size);
+              shape = new CANNON.Box(
+                new CANNON.Vec3(size.x / 2, size.y / 2, size.z / 2)
+              );
+              // }
+
+              const body = new CANNON.Body({
+                mass: 0, // Static body
+                position: new CANNON.Vec3(
+                  child.position.x,
+                  child.position.y,
+                  child.position.z
+                ),
+                shape: shape,
+              });
+              // body.addShape(shape);
+              world.addBody(body);
+              child.userData.body = body;
+            }
+          });
+        }
       },
-      // Progress callback
       (xhr) => {
         const percentLoaded = (xhr.loaded / xhr.total) * 100;
         console.log(`Model loading: ${Math.round(percentLoaded)}%`);
       },
-      // Error callback
       (error) => {
         console.error("An error occurred while loading the model:", error);
       }
@@ -263,26 +342,21 @@ function handleControllerInputForRight(controller) {
   }
 }
 
-// Event tick
-let cnt = 0;
-function render(time, xrFrame) {
-  time *= 0.001;
+const clock = new THREE.Clock();
 
-  // if (xrFrame && cnt == 0) {
-  //   const referenceSpace = renderer.xr.getReferenceSpace();
-  //   const session = renderer.xr.getSession();
-  //   const viewerPose = xrFrame.getViewerPose(referenceSpace);
-  //   if (viewerPose) {
-  //     const orientation = viewerPose.transform.orientation;
-  //     collisionCapsule.quaternion.set(
-  //       0,
-  //       orientation.y,
-  //       0,
-  //       0,
-  //     );
-  //   }
-  //   cnt++;
-  // }
+//tick
+let previousElapseTime = 0;
+
+// Event tick
+function render(time, xrFrame) {
+  const elapsedTime = clock.getElapsedTime();
+  const deltaTime = elapsedTime - previousElapseTime;
+  previousElapseTime = elapsedTime;
+
+  if (debug) {
+    cannonDebugger.update();
+  }
+  world.step(Math.min(deltaTime, 0.1));
 
   if (resizeRendererToDisplaySize(renderer)) {
     const canvas = renderer.domElement;
@@ -298,13 +372,11 @@ function render(time, xrFrame) {
     handleMovement();
     handleTurn();
 
-    // let location = collisionCapsule.position.clone();
-    // camera.position.add(new THREE.Vector3(0, capsuleHeight / 2, 0));
-
-    // Update the ray's position and direction if raycasting is enabled
     if (isRaycasting) {
-      updateRay(controller1);
+      updateRay(controller2);
     }
+    collisionCapsule.quaternion.copy(collisionCapsuleBody.quaternion);
+    collisionCapsule.position.copy(collisionCapsuleBody.position);
   }
   renderer.render(scene, camera);
 }
@@ -357,7 +429,7 @@ function playAudio(obj) {
 
 let prevIntersectObject = null;
 function updateRay(controller) {
-  raycaster.setFromXRController(controller1);
+  raycaster.setFromXRController(controller2);
 
   const direction = new THREE.Vector3(0, 0, -1)
     .applyMatrix4(controller.matrixWorld)
@@ -385,18 +457,14 @@ function updateRay(controller) {
 init();
 
 function getForwardVector(object) {
-  // Create a new Vector3 object pointing to the negative z-axis
   var forward = new THREE.Vector3(0, 0, -1);
-  // Apply the object's rotation to the vector
   forward.applyQuaternion(object.quaternion);
   forward.normalize();
   return forward;
 }
 
 function getRightVector(object) {
-  // Create a new Vector3 object pointing to the positive x-axis
   var right = new THREE.Vector3(1, 0, 0);
-  // Apply the object's rotation to the vector
   right.applyQuaternion(object.quaternion);
   right.normalize();
   return right;
@@ -412,26 +480,33 @@ function handleMovement() {
   }
 
   const vrCamera = renderer.xr.getCamera(camera);
-  const forwardVec = getForwardVector(collisionCapsule);
-  const rightVec = getRightVector(collisionCapsule);
-  // vrCamera.rotation.x=0;
-  // vrCamera.rotation.z = 0;
-  
+
+  const forwardVec = getForwardVector(collisionCapsuleBody);
+  const rightVec = getRightVector(collisionCapsuleBody);
+
   forwardVec.multiplyScalar(LeftController_inputY);
   rightVec.multiplyScalar(LeftController_inputX);
 
+  // Combine the forward and right vectors
   let resultantVec = new THREE.Vector3();
   resultantVec.addVectors(forwardVec, rightVec);
-  resultantVec.applyEuler(vrCamera.rotation);
   resultantVec.multiplyScalar(characterSpeed);
+
+  const cameraQuaternion = vrCamera.quaternion;
+
+  resultantVec.applyQuaternion(cameraQuaternion);
   resultantVec.y = 0;
-  // resultantVec.z = 0;
+
   if (
     !isNaN(resultantVec.x) &&
     !isNaN(resultantVec.y) &&
     !isNaN(resultantVec.z)
   ) {
     collisionCapsule.position.add(resultantVec);
+    collisionCapsuleBody.position.vadd(
+      resultantVec,
+      collisionCapsuleBody.position
+    );
   } else {
     console.error("NaN detected in resultant vector:", resultantVec);
   }
@@ -466,6 +541,12 @@ function handleTurn(check = true) {
     }
     // Apply rotation to the collision capsule
     collisionCapsule.rotateY(rotationAmount);
+    collisionCapsuleBody.quaternion.set(
+      collisionCapsule.quaternion.x,
+      collisionCapsule.quaternion.y,
+      collisionCapsule.quaternion.z,
+      collisionCapsule.quaternion.w
+    );
   } else if (RightController_inputX >= -0.1 && RightController_inputX <= 0.1) {
     isStarted = false;
   }
@@ -478,7 +559,7 @@ async function setupLightning(renderer, scene) {
   pmremGenerator.compileEquirectangularShader();
 
   await loader.load(
-    "/assets/industrial_sunset_puresky_4k.HDR",
+    "/assets/industrial_sunset_puresky_1k.hdr",
     (texture) => {
       const envMap = pmremGenerator.fromEquirectangular(texture).texture;
       pmremGenerator.dispose();
