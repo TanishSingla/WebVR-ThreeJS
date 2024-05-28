@@ -16,8 +16,7 @@ let controller1, controller2;
 let controllerGrip1, controllerGrip2;
 let LeftController_inputY, LeftController_inputX;
 let RightController_inputY, RightController_inputX;
-const characterSpeed = 0.05;
-const TurningSpeed = 0.01;
+const characterSpeed = 0.03;
 let controls;
 let raycaster, intersectedObject, rayLine, listener;
 let isRaycasting = false;
@@ -104,6 +103,7 @@ async function init() {
   });
   collisionCapsule = new THREE.Mesh(capsuleGeometry, capsuleMaterial);
   scene.add(collisionCapsule);
+
   collisionCapsule.add(camera);
   collisionCapsule.position.set(0, 0, 0);
 
@@ -242,7 +242,6 @@ async function loadModel(path, hide) {
               shape = new CANNON.Box(
                 new CANNON.Vec3(size.x / 2, size.y / 2, size.z / 2)
               );
-              // }
 
               const body = new CANNON.Body({
                 mass: 0, // Static body
@@ -521,14 +520,12 @@ function handleTurn(check = true) {
     isStarted = true;
     if (
       isNaN(RightController_inputX) ||
-      isNaN(RightController_inputY) ||
-      isNaN(TurningSpeed)
+      isNaN(RightController_inputY) 
     ) {
       console.error(
         "Invalid input:",
         RightController_inputX,
-        RightController_inputY,
-        TurningSpeed
+        RightController_inputY
       );
       return;
     }
