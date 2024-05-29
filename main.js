@@ -27,9 +27,21 @@ let world;
 let collisionCapsuleBody;
 let cannonDebugger;
 let debug = false;
+let StartingLoader;
 
 async function init() {
   scene = new THREE.Scene();
+
+  StartingLoader = new THREE.LoadingManager();
+  
+  StartingLoader.onLoad = function () {
+    const loader = document.querySelector(".flexbox");
+    if (loader) {
+        loader.style.display = "none";
+    }
+  };
+  
+  
   raycaster = new THREE.Raycaster(
     new THREE.Vector3(),
     new THREE.Vector3(0, 0, -1),
@@ -47,7 +59,7 @@ async function init() {
   cannonDebugger = new CannonDebugger(scene, world);
 
   const noBounceMaterial = new CANNON.Material("noBounce");
-  console.log(noBounceMaterial);
+  
   const plasticContactConcreteMaterial = new CANNON.Material("plastic");
   const noBounceContactMaterial = new CANNON.ContactMaterial(
     noBounceMaterial,
@@ -143,7 +155,7 @@ async function init() {
 }
 
 function onSessionEnd() {
-  console.log("session end");
+
   collisionCapsule.position.set(0, 0, 0);
   camera.position.set(0, 1.6, 3);
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -206,14 +218,14 @@ function onSelectStartController2() {
 }
 
 function onSelectEndController2() {
-  console.log("Input Ended");
+  
 }
 
 async function loadModel(path, hide) {
-  const draco = new DRACOLoader();
+  const draco = new DRACOLoader(StartingLoader);
   draco.setDecoderConfig({ type: "js" });
   draco.setDecoderPath("https://www.gstatic.com/draco/v1/decoders/");
-  const loader = new GLTFLoader();
+  const loader = new GLTFLoader(StartingLoader);
   loader.setDRACOLoader(draco);
 
   try {
@@ -439,7 +451,7 @@ function updateRay(controller) {
   const intersects = raycaster.intersectObjects(grp.children, true);
   if (intersects.length > 0) {
     intersectedObject = intersects[0].object;
-    console.log(intersectedObject.name);
+    
     if (
       prevIntersectObject == null ||
       prevIntersectObject.name != intersectedObject.name
@@ -518,10 +530,7 @@ function handleTurn(check = true) {
     (RightController_inputX > 0 || RightController_inputX < 0)
   ) {
     isStarted = true;
-    if (
-      isNaN(RightController_inputX) ||
-      isNaN(RightController_inputY) 
-    ) {
+    if (isNaN(RightController_inputX) || isNaN(RightController_inputY)) {
       console.error(
         "Invalid input:",
         RightController_inputX,
@@ -550,7 +559,7 @@ function handleTurn(check = true) {
 }
 
 async function setupLightning(renderer, scene) {
-  const loader = new RGBELoader();
+  const loader = new RGBELoader(StartingLoader);
   const pmremGenerator = new THREE.PMREMGenerator(renderer);
 
   pmremGenerator.compileEquirectangularShader();

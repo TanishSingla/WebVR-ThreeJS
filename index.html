@@ -1,24 +1,62 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web-VR</title>
-    <style> 
-        body{
-            margin: 0;
+    <style>
+        body {
+            box-sizing: border-box;
+            background-color: #263238;
             padding: 0;
-            display: block;
+            margin: 0;
         }
-        
-        /* #c {
-            width: 60%;
-            height: 90%;
-        } */
-    </style>    
+
+        .flexbox {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            position: absolute;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            z-index: 10;
+        }
+
+        .nb-spinner {
+            width: 75px;
+            height: 75px;
+            background: transparent;
+            border-top: 4px solid #009688;
+            border-right: 4px solid transparent;
+            border-radius: 50%;
+            -webkit-animation: 1s spin linear infinite;
+            animation: 1s spin linear infinite;
+        }
+
+        @keyframes spin {
+            from {
+                -webkit-transform: rotate(0deg);
+                transform: rotate(0deg);
+            }
+
+            to {
+                -webkit-transform: rotate(360deg);
+                transform: rotate(360deg);
+            }
+        }
+    </style>
 </head>
+
 <body>
-    <!-- <canvas id="c"></canvas> -->
+
+    <div class="flexbox">
+        <div>
+            <div class="nb-spinner"></div>
+        </div>
+    </div>
+
     <script type="importmap">
         {
             "imports": {
@@ -31,4 +69,5 @@
     </script>
     <script type="module" src="./main.js"></script>
 </body>
+
 </html>
